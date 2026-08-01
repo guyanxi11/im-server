@@ -52,7 +52,7 @@ CREATE DATABASE IF NOT EXISTS im_server DEFAULT CHARACTER SET utf8mb4;
 go run ./cmd/server
 ```
 
-服务默认监听 `:8080`。
+服务默认监听 `:8080`。浏览器打开 http://localhost:8080 即可使用验收前端。
 
 ## 主要接口
 

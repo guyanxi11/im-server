@@ -70,6 +70,17 @@ func NewRouter(
 		groupHandler.ListMessages(w, r)
 	}))
 
+	// 静态验收前端：从项目根目录的 web/ 提供页面
+	// 注意：启动时工作目录需为项目根（go run ./cmd/server），否则找不到静态文件
+	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("web/static"))))
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/" {
+			http.NotFound(w, r)
+			return
+		}
+		http.ServeFile(w, r, "web/index.html")
+	})
+
 	return mux
 }
 

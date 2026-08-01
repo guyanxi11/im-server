@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>im-server 验收台</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <div id="app">
+    <!-- 登录区 -->
+    <section id="auth-view" class="panel auth-panel">
+      <div class="brand">
+        <h1>im-server</h1>
+        <p>本地验收台 · 单聊 / 群聊 / 离线补推</p>
+      </div>
+      <div class="tabs">
+        <button type="button" class="tab active" data-tab="login">登录</button>
+        <button type="button" class="tab" data-tab="register">注册</button>
+      </div>
+      <form id="auth-form">
+        <label>用户名<input id="username" name="username" autocomplete="username" required /></label>
+        <label>密码<input id="password" name="password" type="password" autocomplete="current-password" required /></label>
+        <label id="nickname-wrap" class="hidden">昵称<input id="nickname" name="nickname" /></label>
+        <button type="submit" id="auth-submit">登录</button>
+      </form>
+      <p id="auth-msg" class="msg"></p>
+    </section>
+
+    <!-- 主界面 -->
+    <section id="main-view" class="hidden">
+      <header class="topbar">
+        <div>
+          <strong id="me-name">-</strong>
+          <span class="muted">ID <span id="me-id">-</span></span>
+        </div>
+        <div class="status-row">
+          <span id="ws-dot" class="dot off"></span>
+          <span id="ws-text">未连接</span>
+          <button type="button" id="btn-online" class="ghost">在线用户</button>
+          <button type="button" id="btn-logout" class="ghost">退出</button>
+        </div>
+      </header>
+
+      <div class="layout">
+        <aside class="sidebar">
+          <div class="side-block">
+            <h3>单聊</h3>
+            <div class="row">
+              <input id="peer-id" type="number" min="1" placeholder="对方 user_id" />
+              <button type="button" id="btn-open-peer">打开</button>
+            </div>
+          </div>
+          <div class="side-block">
+            <h3>我的群</h3>
+            <ul id="group-list" class="list"></ul>
+            <div class="row">
+              <input id="group-name" placeholder="新群名称" />
+            </div>
+            <div class="row">
+              <input id="group-members" placeholder="成员ID,逗号分隔" />
+              <button type="button" id="btn-create-group">建群</button>
+            </div>
+          </div>
+          <div class="side-block">
+            <h3>会话</h3>
+            <p id="session-label" class="muted">尚未选择</p>
+          </div>
+        </aside>
+
+        <main class="chat">
+          <div id="messages" class="messages"></div>
+          <form id="send-form" class="composer">
+            <input id="content" placeholder="输入消息，Enter 发送" autocomplete="off" />
+            <button type="submit">发送</button>
+          </form>
+        </main>
+      </div>
+    </section>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+  <script src="/static/app.js"></script>
+</body>
+</html>
