@@ -34,7 +34,7 @@ func main() {
 	hub := ws.NewHub(rdb, msgStore)
 	go hub.Run()
 
-	mux := handler.NewRouter(dbConn, cfg, rdb, hub)
+	mux := handler.NewRouter(dbConn, cfg, rdb, hub, msgStore)
 	srv := handler.NewHTTPServer(cfg.Server.Addr, mux)
 
 	log.Printf("im-server listening on %s", cfg.Server.Addr)

@@ -15,9 +15,9 @@ const (
 // 不必再维护两套存储；FromUsername 做冗余字段，补推离线消息时无需再 JOIN users
 type Message struct {
 	ID           uint       `gorm:"primaryKey" json:"id"`
-	FromUserID   uint       `gorm:"index:idx_from;not null" json:"from_user_id"`
+	FromUserID   uint       `gorm:"index:idx_from_to;not null" json:"from_user_id"`
 	FromUsername string     `gorm:"type:varchar(64);not null" json:"from_username"`
-	ToUserID     uint       `gorm:"index:idx_to_status;not null" json:"to_user_id"`
+	ToUserID     uint       `gorm:"index:idx_from_to;index:idx_to_status;not null" json:"to_user_id"`
 	Content      string     `gorm:"type:varchar(2048);not null" json:"content"`
 	Status       int        `gorm:"index:idx_to_status;not null;default:0" json:"status"`
 	CreatedAt    time.Time  `json:"created_at"`

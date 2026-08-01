@@ -63,3 +63,33 @@ func (s *MessageStore) MarkDelivered(ids []uint) error {
 			"delivered_at": now,
 		}).Error
 }
+
+// ListHistory 分页查询两人之间的单聊历史
+// 返回：消息列表（按 id 降序，最新在前）、总数
+// 查询条件：(A->B) OR (B->A)，保证双向会话都能查到
+func (s *MessageStore) ListHistory(userID, peerID uint, page, limit int) ([]model.Message, int64, error) {
+	if page < 1 {
+		page = 1
+	}
+	if limit < 1 {
+		limit = 20
+	}
+	if limit > 100 {
+		limit = 100 // 防止一次拉太多拖垮接口
+	}
+
+	q := s.db.Model(&model.Message{}).Where(
+		"(from_user_id = ? AND to_user_id = ?) OR (from_user_id = ? AND to_user_id = ?)",
+		userID, peerID, peerID, userID,
+	)
+
+	var total int64
+	if err := q.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	var list []model.Message
+	offset := (page - 1) * limit
+	err := q.Order("id DESC").Offset(offset).Limit(limit).Find(&list).Error
+	return list, total, err
+}

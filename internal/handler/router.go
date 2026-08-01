@@ -9,6 +9,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/guyanxi11/im-server/internal/config"
+	"github.com/guyanxi11/im-server/internal/store"
 	"github.com/guyanxi11/im-server/internal/ws"
 	"github.com/guyanxi11/im-server/pkg/resp"
 )
@@ -16,7 +17,7 @@ import (
 // NewRouter 构建路由表，挂载各业务端点
 // db/cfg/rdb 会被注入到各 handler 中；hub 是 WebSocket 连接注册中心，
 // 调用方需要在别处启动 hub.Run() 的常驻 goroutine
-func NewRouter(db *gorm.DB, cfg *config.Config, rdb *redis.Client, hub *ws.Hub) *http.ServeMux {
+func NewRouter(db *gorm.DB, cfg *config.Config, rdb *redis.Client, hub *ws.Hub, msgStore *store.MessageStore) *http.ServeMux {
 	mux := http.NewServeMux()
 
 	authHandler := NewAuthHandler(db, cfg)
@@ -27,7 +28,6 @@ func NewRouter(db *gorm.DB, cfg *config.Config, rdb *redis.Client, hub *ws.Hub) 
 	mux.HandleFunc("/ws", ws.NewWSHandler(hub, cfg.JWT.Secret))
 
 	// /api/online：调试用途，查看当前 Redis 里记录的在线用户 ID 列表
-	// 后续可能会加鉴权限制（仅 admin 可查），当前阶段先开放方便联调
 	mux.HandleFunc("/api/online", func(w http.ResponseWriter, r *http.Request) {
 		ids, err := hub.OnlineUserIDs(r.Context())
 		if err != nil {
@@ -36,6 +36,10 @@ func NewRouter(db *gorm.DB, cfg *config.Config, rdb *redis.Client, hub *ws.Hub) 
 		}
 		resp.OK(w, map[string]interface{}{"online_user_ids": ids})
 	})
+
+	// /api/messages：单聊历史分页，必须登录
+	msgHandler := NewMessageHandler(msgStore)
+	mux.HandleFunc("/api/messages", withJWTAuth(cfg.JWT.Secret, msgHandler.ListHistory))
 
 	return mux
 }
