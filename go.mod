@@ -1,4 +1,4 @@
-module github.com/wym/im-server
+module github.com/guyanxi11/im-server
 
 go 1.26.1
 

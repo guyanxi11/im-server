@@ -1,5 +1,5 @@
 // Package handler（auth_handler.go）实现用户注册与登录接口
-// 作者: wym
+// 作�? wym
 package handler
 
 import (
@@ -10,13 +10,13 @@ import (
 
 	"gorm.io/gorm"
 
-	"github.com/wym/im-server/internal/auth"
-	"github.com/wym/im-server/internal/config"
-	"github.com/wym/im-server/internal/model"
-	"github.com/wym/im-server/pkg/resp"
+	"github.com/guyanxi11/im-server/internal/auth"
+	"github.com/guyanxi11/im-server/internal/config"
+	"github.com/guyanxi11/im-server/internal/model"
+	"github.com/guyanxi11/im-server/pkg/resp"
 )
 
-// 业务错误码：0 表示成功，非 0 按模块分段（1xxx 用户相关），方便前端按 code 分支处理
+// 业务错误码：0 表示成功，非 0 按模块分段（1xxx 用户相关），方便前端�?code 分支处理
 const (
 	CodeInvalidParam   = 1001
 	CodeUsernameExists = 1002
@@ -25,30 +25,28 @@ const (
 	CodeServerError    = 1005
 )
 
-// AuthHandler 持有数据库连接和配置，提供注册/登录两个 HTTP handler
+// AuthHandler 持有数据库连接和配置，提供注�?登录两个 HTTP handler
 type AuthHandler struct {
 	db  *gorm.DB
 	cfg *config.Config
 }
 
-// NewAuthHandler 构造 AuthHandler
+// NewAuthHandler 构�?AuthHandler
 func NewAuthHandler(db *gorm.DB, cfg *config.Config) *AuthHandler {
 	return &AuthHandler{db: db, cfg: cfg}
 }
 
-// registerRequest 是注册接口的请求体
-type registerRequest struct {
+// registerRequest 是注册接口的请求�?type registerRequest struct {
 	Username string `json:"username"`
 	Password string `json:"password"`
 	Nickname string `json:"nickname"`
 }
 
 // Register 处理 POST /api/register
-// 流程：校验参数 -> 检查用户名是否已存在 -> bcrypt 加密密码 -> 插入用户表
-func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
+// 流程：校验参�?-> 检查用户名是否已存�?-> bcrypt 加密密码 -> 插入用户�?func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	var req registerRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		resp.Fail(w, http.StatusBadRequest, CodeInvalidParam, "请求体解析失败")
+		resp.Fail(w, http.StatusBadRequest, CodeInvalidParam, "请求体解析失�?)
 		return
 	}
 	req.Username = strings.TrimSpace(req.Username)
@@ -58,15 +56,14 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if len(req.Password) < 6 {
-		resp.Fail(w, http.StatusBadRequest, CodeInvalidParam, "密码长度不能少于 6 位")
+		resp.Fail(w, http.StatusBadRequest, CodeInvalidParam, "密码长度不能少于 6 �?)
 		return
 	}
 
 	// 用户名唯一性检查：先查一次，虽然存在极小的并发竞态窗口，
-	// 但表上有 uniqueIndex 兜底，真正并发冲突时 Create 会报错，这里再兜底处理一次
-	var count int64
+	// 但表上有 uniqueIndex 兜底，真正并发冲突时 Create 会报错，这里再兜底处理一�?	var count int64
 	if err := h.db.Model(&model.User{}).Where("username = ?", req.Username).Count(&count).Error; err != nil {
-		resp.Fail(w, http.StatusInternalServerError, CodeServerError, "服务器内部错误")
+		resp.Fail(w, http.StatusInternalServerError, CodeServerError, "服务器内部错�?)
 		return
 	}
 	if count > 0 {
@@ -82,8 +79,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 
 	nickname := req.Nickname
 	if nickname == "" {
-		nickname = req.Username // 未填昵称时默认用用户名
-	}
+		nickname = req.Username // 未填昵称时默认用用户�?	}
 
 	user := model.User{
 		Username:     req.Username,
@@ -102,8 +98,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// loginRequest 是登录接口的请求体
-type loginRequest struct {
+// loginRequest 是登录接口的请求�?type loginRequest struct {
 	Username string `json:"username"`
 	Password string `json:"password"`
 }
@@ -113,7 +108,7 @@ type loginRequest struct {
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	var req loginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		resp.Fail(w, http.StatusBadRequest, CodeInvalidParam, "请求体解析失败")
+		resp.Fail(w, http.StatusBadRequest, CodeInvalidParam, "请求体解析失�?)
 		return
 	}
 
@@ -124,12 +119,12 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		resp.Fail(w, http.StatusInternalServerError, CodeServerError, "服务器内部错误")
+		resp.Fail(w, http.StatusInternalServerError, CodeServerError, "服务器内部错�?)
 		return
 	}
 
 	if err := auth.CheckPassword(user.PasswordHash, req.Password); err != nil {
-		// 出于安全考虑，用户不存在和密码错误返回相同的提示，避免暴露"哪个用户名存在"
+		// 出于安全考虑，用户不存在和密码错误返回相同的提示，避免暴�?哪个用户名存�?
 		resp.Fail(w, http.StatusUnauthorized, CodeWrongPassword, "用户名或密码错误")
 		return
 	}
