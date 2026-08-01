@@ -38,22 +38,30 @@ type Hub struct {
 	rdb *redis.Client
 	// msgStore 用于上线补推离线消息；单聊落库也走它
 	msgStore *store.MessageStore
+	// groupStore 用于群成员校验与成员列表查询
+	groupStore *store.GroupStore
 }
 
 // NewHub 构造 Hub
-func NewHub(rdb *redis.Client, msgStore *store.MessageStore) *Hub {
+func NewHub(rdb *redis.Client, msgStore *store.MessageStore, groupStore *store.GroupStore) *Hub {
 	return &Hub{
 		register:   make(chan *Client),
 		unregister: make(chan *Client),
 		clients:    make(map[uint]*Client),
 		rdb:        rdb,
 		msgStore:   msgStore,
+		groupStore: groupStore,
 	}
 }
 
 // MsgStore 暴露给 Client 做消息落库，避免 Client 直接依赖全局变量
 func (h *Hub) MsgStore() *store.MessageStore {
 	return h.msgStore
+}
+
+// GroupStore 暴露给 Client 做群成员校验
+func (h *Hub) GroupStore() *store.GroupStore {
+	return h.groupStore
 }
 
 // Run 是 Hub 的主循环，必须在 main 启动时用一个独立 goroutine 跑起来，且只跑一份
@@ -104,11 +112,16 @@ func (h *Hub) flushOffline(userID uint) {
 
 	deliveredIDs := make([]uint, 0, len(list))
 	for _, m := range list {
+		msgType := MsgTypeChat
+		if m.GroupID > 0 {
+			msgType = MsgTypeGroupChat
+		}
 		payload, err := encodeOutbound(OutboundMessage{
-			Type:     MsgTypeChat,
+			Type:     msgType,
 			From:     m.FromUserID,
 			FromName: m.FromUsername,
 			To:       m.ToUserID,
+			GroupID:  m.GroupID,
 			Content:  m.Content,
 			TS:       m.CreatedAt.Unix(),
 		})

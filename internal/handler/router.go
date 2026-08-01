@@ -15,19 +15,22 @@ import (
 )
 
 // NewRouter 构建路由表，挂载各业务端点
-// db/cfg/rdb 会被注入到各 handler 中；hub 是 WebSocket 连接注册中心，
-// 调用方需要在别处启动 hub.Run() 的常驻 goroutine
-func NewRouter(db *gorm.DB, cfg *config.Config, rdb *redis.Client, hub *ws.Hub, msgStore *store.MessageStore) *http.ServeMux {
+func NewRouter(
+	db *gorm.DB,
+	cfg *config.Config,
+	rdb *redis.Client,
+	hub *ws.Hub,
+	msgStore *store.MessageStore,
+	groupStore *store.GroupStore,
+) *http.ServeMux {
 	mux := http.NewServeMux()
 
 	authHandler := NewAuthHandler(db, cfg)
 	mux.HandleFunc("/api/register", authHandler.Register)
 	mux.HandleFunc("/api/login", authHandler.Login)
 
-	// /ws：WebSocket 接入端点，需要 ?token=xxx 携带登录时签发的 JWT
 	mux.HandleFunc("/ws", ws.NewWSHandler(hub, cfg.JWT.Secret))
 
-	// /api/online：调试用途，查看当前 Redis 里记录的在线用户 ID 列表
 	mux.HandleFunc("/api/online", func(w http.ResponseWriter, r *http.Request) {
 		ids, err := hub.OnlineUserIDs(r.Context())
 		if err != nil {
@@ -37,15 +40,40 @@ func NewRouter(db *gorm.DB, cfg *config.Config, rdb *redis.Client, hub *ws.Hub, 
 		resp.OK(w, map[string]interface{}{"online_user_ids": ids})
 	})
 
-	// /api/messages：单聊历史分页，必须登录
 	msgHandler := NewMessageHandler(msgStore)
 	mux.HandleFunc("/api/messages", withJWTAuth(cfg.JWT.Secret, msgHandler.ListHistory))
+
+	// 群相关：用不同路径区分方法语义，统一要求登录
+	groupHandler := NewGroupHandler(groupStore, msgStore)
+	mux.HandleFunc("/api/groups", withJWTAuth(cfg.JWT.Secret, func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodPost:
+			groupHandler.Create(w, r)
+		case http.MethodGet:
+			groupHandler.ListMine(w, r)
+		default:
+			resp.Fail(w, http.StatusMethodNotAllowed, CodeInvalidParam, "仅支持 GET/POST")
+		}
+	}))
+	mux.HandleFunc("/api/groups/members", withJWTAuth(cfg.JWT.Secret, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			resp.Fail(w, http.StatusMethodNotAllowed, CodeInvalidParam, "仅支持 POST")
+			return
+		}
+		groupHandler.AddMembers(w, r)
+	}))
+	mux.HandleFunc("/api/groups/messages", withJWTAuth(cfg.JWT.Secret, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			resp.Fail(w, http.StatusMethodNotAllowed, CodeInvalidParam, "仅支持 GET")
+			return
+		}
+		groupHandler.ListMessages(w, r)
+	}))
 
 	return mux
 }
 
-// NewHTTPServer 构造一个 *http.Server，统一在这里设置超时等参数
-// 后续接入业务时，超时、读超时需要按长连接场景调整（WebSocket 不宜设过短读超时）
+// NewHTTPServer 构造一个 *http.Server
 func NewHTTPServer(addr string, h http.Handler) *http.Server {
 	return &http.Server{
 		Addr:    addr,

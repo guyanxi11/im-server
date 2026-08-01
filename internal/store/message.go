@@ -23,10 +23,25 @@ func NewMessageStore(db *gorm.DB) *MessageStore {
 // SaveChat 持久化一条单聊消息，返回带自增 ID 的记录
 // status 由调用方决定：在线投递成功写 Delivered，否则写 Pending
 func (s *MessageStore) SaveChat(fromID uint, fromName string, toID uint, content string, status int) (*model.Message, error) {
+	return s.saveMsg(fromID, fromName, toID, 0, content, status)
+}
+
+// SaveGroupHistory 写入一条群聊"会话主记录"（ToUserID=0），供群历史分页查询
+func (s *MessageStore) SaveGroupHistory(fromID uint, fromName string, groupID uint, content string) (*model.Message, error) {
+	return s.saveMsg(fromID, fromName, 0, groupID, content, model.MsgStatusDelivered)
+}
+
+// SaveGroupOffline 为某个离线群成员写入待补推副本
+func (s *MessageStore) SaveGroupOffline(fromID uint, fromName string, toID, groupID uint, content string) (*model.Message, error) {
+	return s.saveMsg(fromID, fromName, toID, groupID, content, model.MsgStatusPending)
+}
+
+func (s *MessageStore) saveMsg(fromID uint, fromName string, toID, groupID uint, content string, status int) (*model.Message, error) {
 	msg := &model.Message{
 		FromUserID:   fromID,
 		FromUsername: fromName,
 		ToUserID:     toID,
+		GroupID:      groupID,
 		Content:      content,
 		Status:       status,
 	}
@@ -64,22 +79,12 @@ func (s *MessageStore) MarkDelivered(ids []uint) error {
 		}).Error
 }
 
-// ListHistory 分页查询两人之间的单聊历史
-// 返回：消息列表（按 id 降序，最新在前）、总数
-// 查询条件：(A->B) OR (B->A)，保证双向会话都能查到
+// ListHistory 分页查询两人之间的单聊历史（排除群聊记录）
 func (s *MessageStore) ListHistory(userID, peerID uint, page, limit int) ([]model.Message, int64, error) {
-	if page < 1 {
-		page = 1
-	}
-	if limit < 1 {
-		limit = 20
-	}
-	if limit > 100 {
-		limit = 100 // 防止一次拉太多拖垮接口
-	}
+	page, limit = normalizePage(page, limit)
 
 	q := s.db.Model(&model.Message{}).Where(
-		"(from_user_id = ? AND to_user_id = ?) OR (from_user_id = ? AND to_user_id = ?)",
+		"group_id = 0 AND ((from_user_id = ? AND to_user_id = ?) OR (from_user_id = ? AND to_user_id = ?))",
 		userID, peerID, peerID, userID,
 	)
 
@@ -92,4 +97,34 @@ func (s *MessageStore) ListHistory(userID, peerID uint, page, limit int) ([]mode
 	offset := (page - 1) * limit
 	err := q.Order("id DESC").Offset(offset).Limit(limit).Find(&list).Error
 	return list, total, err
+}
+
+// ListGroupHistory 分页查询群聊历史（只查 ToUserID=0 的会话主记录，避免离线副本重复）
+func (s *MessageStore) ListGroupHistory(groupID uint, page, limit int) ([]model.Message, int64, error) {
+	page, limit = normalizePage(page, limit)
+
+	q := s.db.Model(&model.Message{}).Where("group_id = ? AND to_user_id = 0", groupID)
+
+	var total int64
+	if err := q.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	var list []model.Message
+	offset := (page - 1) * limit
+	err := q.Order("id DESC").Offset(offset).Limit(limit).Find(&list).Error
+	return list, total, err
+}
+
+func normalizePage(page, limit int) (int, int) {
+	if page < 1 {
+		page = 1
+	}
+	if limit < 1 {
+		limit = 20
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	return page, limit
 }

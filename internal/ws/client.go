@@ -83,6 +83,8 @@ func (c *Client) handleInbound(payload []byte) {
 		c.replyPong()
 	case MsgTypeChat:
 		c.handleChat(in)
+	case MsgTypeGroupChat:
+		c.handleGroupChat(in)
 	default:
 		c.replyError("未知消息类型: " + in.Type)
 	}
@@ -143,6 +145,78 @@ func (c *Client) handleChat(in InboundMessage) {
 	} else {
 		log.Printf("[ws] chat %d -> %d saved offline", c.UserID, in.To)
 	}
+}
+
+// handleGroupChat 处理群聊：校验成员 -> 写历史主记录 -> 在线扩散 / 离线落 Pending
+// 扩散策略（fan-out on write）：遍历成员，在线则推 WS，离线则写离线副本。
+// 面试可对比 fan-out on read（读扩散）：写一次，读时再查成员推送，写更轻但读更重。
+func (c *Client) handleGroupChat(in InboundMessage) {
+	content := strings.TrimSpace(in.Content)
+	if in.GroupID == 0 {
+		c.replyError("缺少 group_id")
+		return
+	}
+	if content == "" {
+		c.replyError("消息内容不能为空")
+		return
+	}
+
+	ok, err := c.hub.GroupStore().IsMember(in.GroupID, c.UserID)
+	if err != nil {
+		c.replyError("校验群成员失败")
+		return
+	}
+	if !ok {
+		c.replyError("你不是该群成员")
+		return
+	}
+
+	members, err := c.hub.GroupStore().ListMemberIDs(in.GroupID)
+	if err != nil {
+		c.replyError("获取群成员失败")
+		return
+	}
+
+	// 群历史只存一条主记录，避免每个成员一条导致历史接口重复
+	if _, err := c.hub.MsgStore().SaveGroupHistory(c.UserID, c.Username, in.GroupID, content); err != nil {
+		log.Printf("[ws] save group history failed: %v", err)
+		c.replyError("群消息保存失败")
+		return
+	}
+
+	out := OutboundMessage{
+		Type:     MsgTypeGroupChat,
+		From:     c.UserID,
+		FromName: c.Username,
+		GroupID:  in.GroupID,
+		Content:  content,
+		TS:       time.Now().Unix(),
+	}
+	payload, err := encodeOutbound(out)
+	if err != nil {
+		c.replyError("消息序列化失败")
+		return
+	}
+
+	onlineCnt, offlineCnt := 0, 0
+	for _, uid := range members {
+		if uid == c.UserID {
+			continue // 不回推给自己，客户端本地已展示
+		}
+		if c.hub.SendToUser(uid, payload) {
+			onlineCnt++
+			continue
+		}
+		// 离线成员写 Pending 副本，上线后由 flushOffline 补推
+		if _, err := c.hub.MsgStore().SaveGroupOffline(c.UserID, c.Username, uid, in.GroupID, content); err != nil {
+			log.Printf("[ws] save group offline failed user=%d: %v", uid, err)
+			continue
+		}
+		offlineCnt++
+	}
+
+	c.replyAck(true, "group_sent")
+	log.Printf("[ws] group_chat group=%d from=%d online=%d offline=%d", in.GroupID, c.UserID, onlineCnt, offlineCnt)
 }
 
 // replyError 向本连接推送一条错误通知（走 send channel，不直接写 conn）

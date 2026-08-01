@@ -29,12 +29,12 @@ func main() {
 	log.Println("Redis 连接成功")
 
 	msgStore := store.NewMessageStore(dbConn)
+	groupStore := store.NewGroupStore(dbConn)
 
-	// Hub 是全局唯一的连接注册中心，Run() 必须常驻运行，不能跟随某个请求的生命周期
-	hub := ws.NewHub(rdb, msgStore)
+	hub := ws.NewHub(rdb, msgStore, groupStore)
 	go hub.Run()
 
-	mux := handler.NewRouter(dbConn, cfg, rdb, hub, msgStore)
+	mux := handler.NewRouter(dbConn, cfg, rdb, hub, msgStore, groupStore)
 	srv := handler.NewHTTPServer(cfg.Server.Addr, mux)
 
 	log.Printf("im-server listening on %s", cfg.Server.Addr)

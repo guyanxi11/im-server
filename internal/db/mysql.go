@@ -27,6 +27,8 @@ func InitMySQL(dsn string) (*gorm.DB, error) {
 	if err := dbConn.AutoMigrate(
 		&model.User{},
 		&model.Message{},
+		&model.Group{},
+		&model.GroupMember{},
 	); err != nil {
 		return nil, fmt.Errorf("自动迁移表结构失败: %w", err)
 	}
